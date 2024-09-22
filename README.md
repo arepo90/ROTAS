@@ -1,6 +1,6 @@
 # ROTAS (Real-time Optimized Transmission for Aggregated Sources)
 
-Self-contained server and client applications for TCP video streaming. Optimized for low latency and bandwith (<=1 mbps) at standard definition.
+Self-contained server and client applications for TCP video streaming. Optimized for low latency and low bandwith (<=1 mbps) at standard definition, although it can be repurposed to send any kind of messages.
 
 _Windows only version for now, Linux coming soon_
 
