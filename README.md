@@ -32,7 +32,7 @@ mkdir build
 cmake -B .\build\
 ```
 
-3. Compile executables (required after every modification)
+3. Compile executables
 ```
 cmake --build .\build\
 ```
@@ -49,8 +49,6 @@ Client (sender):
 .\build\Debug\client.exe <flags> <arguments>
 ```
 
-## How to use
-
 ### Linux
 
 1. Clone repo
@@ -59,7 +57,7 @@ git clone https://github.com/arepo90/ROTAS.git
 cd ROTAS
 ```
 
-2. Compile executables (required after every modification)
+2. Compile executables
 ```
 g++ client_linux.cpp -o client_linux `pkg-config --cflags --libs opencv4`
 ```
@@ -71,10 +69,39 @@ g++ client_linux.cpp -o client_linux `pkg-config --cflags --libs opencv4`
 
 ### Flags
 
-_Coming soon_
+To change application settings without the need to modify the source code and rebuild the executables
+
+#### General options
+
+| Flag             | Argument   | Setting               | Default |
+|------------------|------------|-----------------------|---------|
+| `-H` `--help`    |            | Displays flag options |         |
+| `-v` `--verbose` |            | Verbose console logs  | false   |
+| `-p` `--port`    | port       | TCP port              | 8080    |
+
+#### Client specific options 
+
+| Flag             | Argument   | Setting                     | Default               |
+|------------------|------------|-----------------------------|-----------------------|
+| `-i` `--ip`      | address    | Server IP address           | 127.0.0.1 (localhost) |
+| `-m` `--mode`    | number     | [Transmission mode](#Transmission-modes) | 0        |
+| `-c` `--cams`    | number     | Number of camera sources    | 1                     |
+| `-w` `--width`   | pixels     | Horizontal video resolution | 1280                  |
+| `-h` `--height`  | pixels     | Vertical video resolution   | 720                   |
+| `-q` `--quality` | number     | Video image quality (1-100) | 50                    |
+
+## Transmission modes
+
+Depending on the network infrastructure and available bandwith, you may want to prioritize frame rate, connection stability, image quality, etc. This can be achieved by changing the argument of the `--mode` flag on the client executable:
+
+- `0` __Bundles__: All video source frames are compresed and merged into one package, which is transmitted in a single transaction. Keeps the frame rate relatively unchanged, but package size increases linearly with the number of sources if kept at the same quality and resolution.
+- `1` __Swaps__: Video source frames are put into separate packages, which are then sent one after the other in a single transaction. Keeps the package size unchanged, but the frame rate is effectively divided by the number of sources.
+
+> More coming soon
 
 ## Logs
-All applications regularly print console messages of different types:
+All applications regularly print console messages of different types (to receive __all__ available logs, make sure to include the `--verbose` flag on the executable):
+
 - `[i]` __Information__: Provides updates as to what the program is currently doing. When followed by `...`, it means the program is awaiting a response from a blocking function.
 - `[w]` __Warning__: Alerts about a non catastrophic error, most likely caused by the remote peer. Usually followed by an attempt to reset the connection.
 - `[e]` __Error__: Gives out an error number and message relating to what went wrong, followed by ending the program. Usually caused by an internal problem or a fatal cononection loss.
