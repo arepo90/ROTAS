@@ -11,12 +11,13 @@ using namespace std;
 using namespace cv;
 using namespace chrono;
 
-#define PORT 8080
-#define BUFFER_SIZE 921632 //230432
-#define WIDTH 1280
-#define HEIGHT 720
+int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = WIDTH*SIZE+32, CAMS = 1;
 
-int main(){
+int args(int argc, char* argv[]);
+
+int main(int argc, char* argv[]){
+    if(args(argc, argv)) return 1;
+
     WSADATA wsaData;
     SOCKET server_socket, client_socket;
     struct sockaddr_in server_addr, client_addr;
@@ -111,5 +112,81 @@ int main(){
     closesocket(client_socket);
     closesocket(server_socket);
     WSACleanup();
+    return 0;
+}
+
+int args(int argc, char* argv[]){
+    for(int i = 1; i < argc; ++i){
+        string arg = argv[i];
+        if(arg == "--port" || arg == "-p"){
+            if(i+1 < argc){
+                try{
+                    PORT = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --port invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --port requires a port number\n";
+                return 1;
+            }
+        }
+        else if(arg == "--width" || arg == "-w"){
+            if(i+1 < argc){
+                try{
+                    WIDTH = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --width invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --width requires a horizontal resolution\n";
+                return 1;
+            }
+        }
+        else if(arg == "--height" || arg == "-h"){
+            if(i+1 < argc){
+                try{
+                    HEIGHT = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --height invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --height requires a vertical resolution\n";
+                return 1;
+            }
+        }
+        else if(arg == "--cams" || arg == "-c"){
+            if(i+1 < argc){
+                try{
+                    CAMS = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --cams invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --cams requires a camera amount\n";
+                return 1;
+            }
+        }
+        else if(arg == "--help" || arg == "-h"){
+            cout << "Options\n  -h\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
+            return 1;
+        }
+        else{
+            cout << "[e] Invalid argument detected\n\nOptions\n  -h\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
+            return 1;
+        }
+    }
+    BUFFER_SIZE = HEIGHT * WIDTH + 32;
     return 0;
 }

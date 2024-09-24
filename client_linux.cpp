@@ -11,14 +11,14 @@ using namespace std;
 using namespace cv;
 typedef unsigned char uchar;
 
-#define SERVER_IP "127.0.0.1"
-#define PORT 8080
-#define BUFFER_SIZE 1024
-#define QUALITY 40
-#define WIDTH 1280
-#define HEIGHT 720
+string SERVER_IP = "127.0.0.1";
+int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1;
 
-int main(){
+int args(int argc, char* argv[]);
+
+int main(int argc, char* argv[]){
+    if(args(argc, argv)) return 1;
+
     int client_socket = 0, attempt = 1;
     struct sockaddr_in server_addr;
     char recv_buffer[BUFFER_SIZE];
@@ -45,7 +45,7 @@ int main(){
             attempt++;
             continue;
         }
-        cout << "[i] Connected to server" << '\n';
+        cout << "[i] Connected to server\n";
 
         cout << "[i] Initializing capture device...\n";
         VideoCapture cap(0);
@@ -56,16 +56,15 @@ int main(){
         cap.set(CAP_PROP_FRAME_WIDTH, WIDTH);
         cap.set(CAP_PROP_FRAME_HEIGHT, HEIGHT);
         Mat frame;
-        vector<uchar> img_buffer{0, 1, 2, 3, 4, 254, 255};
+        vector<uchar> img_buffer;
 
         while(1){
             cap >> frame;
             if(frame.empty()){
-                cout << "[e] Failed to capture frame" << '\n';
+                cout << "[e] Failed to capture frame\n";
                 break;
             }
-            vector<int> compression_params = { IMWRITE_JPEG_QUALITY, QUALITY };
-            imencode(".jpg", frame, img_buffer, compression_params);
+            imencode(".jpg", frame, img_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
 
             int bytes_sent = send(client_socket, reinterpret_cast<const char*>(img_buffer.data()), img_buffer.size(), 0);
             if(bytes_sent < 0){
@@ -96,5 +95,103 @@ int main(){
     
     cout << "[i] Shutting down client...\n";
     close(client_socket);
+    return 0;
+}
+
+
+int args(int argc, char* argv[]){
+    for(int i = 1; i < argc; ++i){
+        string arg = argv[i];
+        if(arg == "--ip" || arg == "-i"){
+            if(i+1 < argc) SERVER_IP = argv[++i];
+            else{
+                cout << "[e] --ip requires an ip address\n";
+                return 1;
+            }
+        }
+        else if(arg == "--port" || arg == "-p"){
+            if(i+1 < argc){
+                try{
+                    PORT = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --port invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --port requires a port number\n";
+                return 1;
+            }
+        }
+        else if(arg == "--width" || arg == "-w"){
+            if(i+1 < argc){
+                try{
+                    WIDTH = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --width invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --width requires a horizontal resolution\n";
+                return 1;
+            }
+        }
+        else if(arg == "--height" || arg == "-h"){
+            if(i+1 < argc){
+                try{
+                    HEIGHT = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --height invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --height requires a vertical resolution\n";
+                return 1;
+            }
+        }
+        else if(arg == "--cams" || arg == "-c"){
+            if(i+1 < argc){
+                try{
+                    CAMS = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --cams invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --cams requires a camera amount\n";
+                return 1;
+            }
+        }
+        else if(arg == "--buffer" || arg == "-b"){
+            if(i+1 < argc){
+                try{
+                    BUFFER_SIZE = stoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --buffer invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --buffer requires a camera amount\n";
+                return 1;
+            }
+        }
+        else if(arg == "--help" || arg == "-h"){
+            cout << "Options\n  -h\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera inputs to transmit\n  -b <bytes>\t\t= Received messages buffer size\n";
+            return 1;
+        }
+        else{
+            cout << "[e] Invalid argument detected\n\nOptions\n  -h\t\t\t= Displays available options\n  -i <address>\t\t= Server IP address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Horizontal video resolution\n  -h <pixels>\t\t= Vertical video resolution\n  -c <number>\t\t= Amount of camera inputs\n  -b <bytes>\t\t= Received messages buffer size\n";
+            return 1;
+        }
+    }
     return 0;
 }
