@@ -1,6 +1,5 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
-#include <sys/types.h>
 #include <winsock2.h>
 #include <windows.h>
 #include <chrono>
@@ -11,6 +10,7 @@ using namespace std;
 using namespace cv;
 using namespace chrono;
 
+bool VERBOSE = false;
 int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1;
 
 int args(int argc, char* argv[]);
@@ -54,7 +54,6 @@ int main(int argc, char* argv[]){
         }
         cout << "[i] Connection accepted\n";
 
-        //char buffer[BUFFER_SIZE];
         char* buffer = new char[BUFFER_SIZE];
         int bytes_received;
         vector<uchar> img_data;
@@ -179,12 +178,13 @@ int args(int argc, char* argv[]){
                 return 1;
             }
         }
-        else if(arg == "--help" || arg == "-h"){
-            cout << "Options\n  -h\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
+        else if(arg == "--help" || arg == "-H"){
+            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
             return 1;
         }
+        else if(arg == "--verbose" || arg == "-v") VERBOSE = true;
         else{
-            cout << "[e] Invalid argument detected\n\nOptions\n  -h\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
+            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
             return 1;
         }
     }

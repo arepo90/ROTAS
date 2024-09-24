@@ -12,8 +12,8 @@ Works by sequencing _transactions_ between the client and server, each including
 2. Is it fast? hell yeah
 
 ## Prerequisites
-- CMake >=3.10 (Windows only)
-- OpenCV 4.10.0
+- CMake >=3.10
+- OpenCV 4.10.0 + opencv_contrib extra modules
 - g++ >=8.1.0
 
 ## How to use
@@ -21,6 +21,10 @@ Works by sequencing _transactions_ between the client and server, each including
 ### Windows
 
 1. Clone repo
+```
+git clone https://github.com/arepo90/ROTAS.git
+cd ROTAS
+```
 
 2. Build CMake cache
 ```
@@ -37,12 +41,12 @@ cmake --build .\build\
 
 Server (receiver):
 ```
-.\build\Debug\server.exe <flag> <argument>
+.\build\Debug\server.exe <flags> <arguments>
 ```
 
 Client (sender):
 ```
-.\build\Debug\client.exe <flag> <argument>
+.\build\Debug\client.exe <flags> <arguments>
 ```
 
 ## How to use
@@ -50,15 +54,19 @@ Client (sender):
 ### Linux
 
 1. Clone repo
+```
+git clone https://github.com/arepo90/ROTAS.git
+cd ROTAS
+```
 
 2. Compile executables (required after every modification)
 ```
-g++ server_linux.cpp -o client_linux `pkg-config --cflags --libs opencv4`
+g++ client_linux.cpp -o client_linux `pkg-config --cflags --libs opencv4`
 ```
 
 3. Run
 ```
-./server_linux <flag> <argument>
+./server_linux <flags> <arguments>
 ```
 
 ### Flags

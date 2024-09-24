@@ -1,6 +1,5 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
-#include <sys/types.h>
 #include <winsock2.h>
 #include <windows.h>
 #pragma comment(lib, "ws2_32.lib")
@@ -9,7 +8,8 @@ using namespace std;
 using namespace cv;
 
 string SERVER_IP = "127.0.0.1";
-int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1, QUALITY = 50;
+bool VERBOSE = false;
+int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1, QUALITY = 50, MODE = 0;
 
 int args(int argc, char* argv[]);
 
@@ -19,7 +19,6 @@ int main(int argc, char* argv[]){
     WSADATA wsaData;
     SOCKET client_socket;
     struct sockaddr_in server_addr;
-    //char recv_buffer[BUFFER_SIZE];
     char* recv_buffer = new char[BUFFER_SIZE];
     int attempt = 1;
 
@@ -192,12 +191,43 @@ int args(int argc, char* argv[]){
                 return 1;
             }
         }
-        else if(arg == "--help" || arg == "-h"){
-            cout << "Options\n  -h\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera inputs to transmit\n  -b <bytes>\t\t= Received messages buffer size\n";
+        else if(arg == "--mode" || arg == "-m"){
+            if(i+1 < argc){
+                try{
+                    MODE = atoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --mode invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --mode requires a number\n";
+                return 1;
+            }
+        }
+        else if(arg == "--quality" || arg == "-q"){
+            if(i+1 < argc){
+                try{
+                    QUALITY = atoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --quality invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --quality requires a camera amount\n";
+                return 1;
+            }
+        }
+        else if(arg == "--help" || arg == "-H"){
+            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -b <bytes>\t\t= Received messages buffer size\n  -m <number>\t\t= Transmission mode (see README)\n";
             return 1;
         }
+        else if(arg == "--verbose" || arg == "-v") VERBOSE = true;
         else{
-            cout << "[e] Invalid argument detected\n\nOptions\n  -h\t\t\t= Displays available options\n  -i <address>\t\t= Server IP address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Horizontal video resolution\n  -h <pixels>\t\t= Vertical video resolution\n  -c <number>\t\t= Amount of camera inputs\n  -b <bytes>\t\t= Received messages buffer size\n";
+            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -b <bytes>\t\t= Received messages buffer size\n  -m <number>\t\t= Transmission mode (see README)\n";
             return 1;
         }
     }
