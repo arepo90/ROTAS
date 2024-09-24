@@ -9,7 +9,7 @@ using namespace std;
 using namespace cv;
 
 string SERVER_IP = "127.0.0.1";
-int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1;
+int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1, QUALITY = 50;
 
 int args(int argc, char* argv[]);
 
@@ -19,7 +19,8 @@ int main(int argc, char* argv[]){
     WSADATA wsaData;
     SOCKET client_socket;
     struct sockaddr_in server_addr;
-    char recv_buffer[BUFFER_SIZE];
+    //char recv_buffer[BUFFER_SIZE];
+    char* recv_buffer = new char[BUFFER_SIZE];
     int attempt = 1;
 
     while(1){
@@ -33,7 +34,7 @@ int main(int argc, char* argv[]){
             return 1;
         }
         server_addr.sin_family = AF_INET;
-        server_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
+        server_addr.sin_addr.s_addr = inet_addr(SERVER_IP.c_str());
         server_addr.sin_port = htons(PORT);
 
         if(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR){
@@ -119,7 +120,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--port" || arg == "-p"){
             if(i+1 < argc){
                 try{
-                    PORT = stoi(argv[++i]);
+                    PORT = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --port invalid number\n";
@@ -134,7 +135,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--width" || arg == "-w"){
             if(i+1 < argc){
                 try{
-                    WIDTH = stoi(argv[++i]);
+                    WIDTH = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --width invalid number\n";
@@ -149,7 +150,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--height" || arg == "-h"){
             if(i+1 < argc){
                 try{
-                    HEIGHT = stoi(argv[++i]);
+                    HEIGHT = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --height invalid number\n";
@@ -164,7 +165,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--cams" || arg == "-c"){
             if(i+1 < argc){
                 try{
-                    CAMS = stoi(argv[++i]);
+                    CAMS = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --cams invalid number\n";
@@ -179,7 +180,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--buffer" || arg == "-b"){
             if(i+1 < argc){
                 try{
-                    BUFFER_SIZE = stoi(argv[++i]);
+                    BUFFER_SIZE = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --buffer invalid number\n";

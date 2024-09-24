@@ -11,7 +11,7 @@ using namespace std;
 using namespace cv;
 using namespace chrono;
 
-int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = WIDTH*SIZE+32, CAMS = 1;
+int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1;
 
 int args(int argc, char* argv[]);
 
@@ -54,7 +54,8 @@ int main(int argc, char* argv[]){
         }
         cout << "[i] Connection accepted\n";
 
-        char buffer[BUFFER_SIZE];
+        //char buffer[BUFFER_SIZE];
+        char* buffer = new char[BUFFER_SIZE];
         int bytes_received;
         vector<uchar> img_data;
         auto prev = high_resolution_clock().now();
@@ -121,7 +122,7 @@ int args(int argc, char* argv[]){
         if(arg == "--port" || arg == "-p"){
             if(i+1 < argc){
                 try{
-                    PORT = stoi(argv[++i]);
+                    PORT = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --port invalid number\n";
@@ -136,7 +137,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--width" || arg == "-w"){
             if(i+1 < argc){
                 try{
-                    WIDTH = stoi(argv[++i]);
+                    WIDTH = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --width invalid number\n";
@@ -151,7 +152,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--height" || arg == "-h"){
             if(i+1 < argc){
                 try{
-                    HEIGHT = stoi(argv[++i]);
+                    HEIGHT = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --height invalid number\n";
@@ -166,7 +167,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--cams" || arg == "-c"){
             if(i+1 < argc){
                 try{
-                    CAMS = stoi(argv[++i]);
+                    CAMS = atoi(argv[++i]);
                 }
                 catch(const invalid_argument&){
                     cout << "[e] --cams invalid number\n";

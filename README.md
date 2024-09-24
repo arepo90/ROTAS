@@ -53,7 +53,7 @@ Client (sender):
 
 2. Compile executables (required after every modification)
 ```
-g++ server_linux.cpp -o server_linux `pkg-config --cflags --libs opencv4`
+g++ server_linux.cpp -o client_linux `pkg-config --cflags --libs opencv4`
 ```
 
 3. Run
