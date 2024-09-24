@@ -56,11 +56,12 @@ int main(int argc, char* argv[]){
 
         char* buffer = new char[BUFFER_SIZE];
         int bytes_received;
-        vector<uchar> img_data;
         auto prev = high_resolution_clock().now();
 
         cout << "[i] Waiting for incoming messages...\n";
+        int previ = 0, conti = 0;
         while(1){
+            vector<uchar> img_data;
             bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
             if(bytes_received == SOCKET_ERROR){
                 cout << "[e] Receive failed. Error Code: " << WSAGetLastError() << '\n';
@@ -75,10 +76,13 @@ int main(int argc, char* argv[]){
             auto curr = high_resolution_clock().now();
             auto duration = duration_cast<milliseconds>(curr-prev);
             prev = high_resolution_clock().now();
-            cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\n";
+            cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t";
+            cout << "pck loss: " << conti << '\n';
 
-            img_data.insert(img_data.end(), buffer, buffer + bytes_received);
+            img_data.insert(img_data.end(), buffer+1, buffer + bytes_received);
             if(bytes_received < BUFFER_SIZE){
+                if(int(buffer[0]) != previ+1 && previ != 255) conti++;
+                previ = int(buffer[0]);
                 Mat img = imdecode(img_data, IMREAD_COLOR);
                 if(!img.empty()) {
                     imshow("Received image", img);
@@ -88,6 +92,7 @@ int main(int argc, char* argv[]){
 
                 string reply = "400";
                 send(client_socket, reply.c_str(), reply.size(), 0);
+                waitKey(1);
             }
 
             if(GetAsyncKeyState('Q') & 0x8000){
