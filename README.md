@@ -28,14 +28,12 @@ mkdir build
 cmake -B .\build\
 ```
 
-3. Change the target server IP and port in the client, default is 127.0.0.1:8080 (localhost)
-
-4. Compile executables (required after every modification)
+3. Compile executables (required after every modification)
 ```
 cmake --build .\build\
 ```
 
-5. Run
+4. Run
 
 Server (receiver):
 ```
