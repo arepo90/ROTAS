@@ -19,11 +19,19 @@ int main(int argc, char* argv[]){
     WSADATA wsaData;
     SOCKET client_socket;
     struct sockaddr_in server_addr;
-    char* recv_buffer = new char[BUFFER_SIZE];
+    vector<char> recv_buffer(BUFFER_SIZE);
     int attempt = 1;
 
     while(1){
         cout << "[i] Initializing client...\n";
+        cout << "[i] Initializing capture device...\n";
+        VideoCapture cap(0);
+        if(!cap.isOpened()){
+            cout << "[e] Error opening camera" << '\n';
+            return 1;
+        }
+        cap.set(CAP_PROP_FRAME_WIDTH, WIDTH);
+        cap.set(CAP_PROP_FRAME_HEIGHT, HEIGHT);
         if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0){
             cout << "[e] Failed to initialize Winsock. Error Code: " << WSAGetLastError() << '\n';
             return 1;
@@ -46,35 +54,42 @@ int main(int argc, char* argv[]){
         }
         cout << "[i] Connected to server\n";
 
-        cout << "[i] Initializing capture device...\n";
-        VideoCapture cap(0);
-        if(!cap.isOpened()){
-            cout << "[e] Error opening camera" << '\n';
-            return 1;
-        }
-        cap.set(CAP_PROP_FRAME_WIDTH, WIDTH);
-        cap.set(CAP_PROP_FRAME_HEIGHT, HEIGHT);
         Mat frame;
         vector<uchar> img_buffer;
+        int bytes_received, bytes_sent, packet_number = 0;
 
         while(1){
-            cap >> frame;
-            if(frame.empty()){
-                cout << "[e] Failed to capture frame\n";
-                break;
-            }
-            imencode(".jpg", frame, img_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
-
-            int bytes_sent = send(client_socket, reinterpret_cast<const char*>(img_buffer.data()), img_buffer.size(), 0);
-            if(bytes_sent == SOCKET_ERROR){
-                cout << "[e] Send failed. Error Code: " << WSAGetLastError() << '\n';
-                break;
-            }
-
-            int bytes_received = recv(client_socket, recv_buffer, BUFFER_SIZE, 0);
+            bytes_received = recv(client_socket, recv_buffer.data(), BUFFER_SIZE, 0);
             if(bytes_received > 0){
-                string reply(recv_buffer, bytes_received);
-                if(reply != "400") cout << "[w] Unexpected reply from server\n";
+                //aqui
+                string reply(recv_buffer.data(), bytes_received);
+                if(reply == "401"){
+                    vector<char> handshake{char(0), char(WIDTH & 0xFF), char((WIDTH >> 8) & 0xFF), char((WIDTH >> 16) & 0xFF), char((WIDTH >> 24) & 0xFF), char(HEIGHT & 0xFF), char((HEIGHT >> 8) & 0xFF), char((HEIGHT >> 16) & 0xFF), char((HEIGHT >> 24) & 0xFF), char(MODE), char(CAMS)};
+                    bytes_sent = send(client_socket, handshake.data(), handshake.size(), 0);
+                    if(bytes_sent == SOCKET_ERROR){
+                        cout << "[e] Send failed. Error Code: " << WSAGetLastError() << '\n';
+                        break;
+                    }
+                }
+                else if(reply == "400"){
+                    cap >> frame;
+                    if(frame.empty()){
+                        cout << "[e] Failed to capture frame\n";
+                        break;
+                    }
+                    imencode(".jpg", frame, img_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
+                    img_buffer.insert(img_buffer.begin(), char(packet_number));
+                    img_buffer.insert(img_buffer.begin(), char(0));
+                    bytes_sent = send(client_socket, reinterpret_cast<const char*>(img_buffer.data()), img_buffer.size(), 0);
+                    cout << "[send] " << fixed << setprecision(2) << img_buffer.size()/1000.0 << " kB\t" << "packet #" << packet_number << '\n';
+                    if(bytes_sent == SOCKET_ERROR){
+                        cout << "[e] Send failed. Error Code: " << WSAGetLastError() << '\n';
+                        break;
+                    }
+                    packet_number++;
+                    packet_number %= 100;
+                }
+                else cout << "[w] Unexpected reply from server: " << reply << '\n';
             }
             else if(bytes_received == 0){
                 cout << "[w] Connection closed by server\n";
@@ -84,6 +99,9 @@ int main(int argc, char* argv[]){
                 cout << "[e] Receive failed. Error Code: " << WSAGetLastError() << '\n';
                 break;
             }
+
+            recv_buffer.clear();
+            img_buffer.clear();
 
             if(GetAsyncKeyState('Q') & 0x8000){
                 cout << "[i] Shutting down client...\n";

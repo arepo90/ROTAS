@@ -11,7 +11,7 @@ using namespace cv;
 using namespace chrono;
 
 bool VERBOSE = false;
-int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, CAMS = 1;
+int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, MODE = 0, CAMS = 1;
 
 int args(int argc, char* argv[]);
 
@@ -54,15 +54,18 @@ int main(int argc, char* argv[]){
         }
         cout << "[i] Connection accepted\n";
 
-        char* buffer = new char[BUFFER_SIZE];
-        int bytes_received;
-        auto prev = high_resolution_clock().now();
+        int prev_packet = 0, lost_packets = 0;
+        vector<char> buffer(BUFFER_SIZE);
+        string reply = "401";
 
-        cout << "[i] Waiting for incoming messages...\n";
-        int previ = 0, conti = 0;
+        send(client_socket, reply.c_str(), reply.size(), 0);
+        cout << "[i] Handshake sent. Awaiting response...\n";
+
+        auto prev = high_resolution_clock().now();
         while(1){
+            int bytes_received;
             vector<uchar> img_data;
-            bytes_received = recv(client_socket, buffer, BUFFER_SIZE, 0);
+            bytes_received = recv(client_socket, buffer.data(), BUFFER_SIZE, 0);
             if(bytes_received == SOCKET_ERROR){
                 cout << "[e] Receive failed. Error Code: " << WSAGetLastError() << '\n';
                 break;
@@ -73,27 +76,45 @@ int main(int argc, char* argv[]){
             }
             cout << "[recv] " << fixed << setprecision(2) << bytes_received/1000.0 << " kB\t";
 
-            auto curr = high_resolution_clock().now();
-            auto duration = duration_cast<milliseconds>(curr-prev);
-            prev = high_resolution_clock().now();
-            cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t";
-            cout << "pck loss: " << conti << '\n';
-
-            img_data.insert(img_data.end(), buffer+1, buffer + bytes_received);
-            if(bytes_received < BUFFER_SIZE){
-                if(int(buffer[0]) != previ+1 && previ != 255) conti++;
-                previ = int(buffer[0]);
-                Mat img = imdecode(img_data, IMREAD_COLOR);
-                if(!img.empty()) {
-                    imshow("Received image", img);
-                    waitKey(1);
+            if(int(buffer[0]) == 0){
+                WIDTH = (int(buffer[1])) | (int(buffer[2]) << 8) | (int(buffer[3]) << 16) | (int(buffer[4]) << 24);
+                HEIGHT = (int(buffer[5])) | (int(buffer[6]) << 8) | (int(buffer[7]) << 16) | (int(buffer[8]) << 24);
+                MODE = int(buffer[9]);
+                CAMS = int(buffer[10]);
+                if(BUFFER_SIZE < (WIDTH*HEIGHT)+32){
+                    BUFFER_SIZE = WIDTH * HEIGHT + 32;
+                    buffer.resize(BUFFER_SIZE);
                 }
-                img_data.clear();
-
-                string reply = "400";
-                send(client_socket, reply.c_str(), reply.size(), 0);
-                waitKey(1);
+                cout << "[i] Handshake complete. Awaiting messages...\n";
             }
+            else if(int(buffer[0]) == 1){
+                if(buffer[1] == 99){
+                    prev_packet = -1;
+                    lost_packets = 0;
+                }
+                else if(buffer[1] != prev_packet+1) lost_packets++;
+                if(MODE == 0){
+                    img_data.insert(img_data.end(), buffer.begin()+1, buffer.end());
+                    auto curr = high_resolution_clock().now();
+                    auto duration = duration_cast<milliseconds>(curr-prev);
+                    prev = high_resolution_clock().now();
+                    cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t" << 100-lost_packets << "% packet loss\n";
+                    Mat img = imdecode(img_data, IMREAD_COLOR);
+                    if(!img.empty()) {
+                        imshow("Received image", img);
+                        waitKey(1);
+                    }
+                    img_data.clear();
+                }
+            }
+            else{
+                cout << "[e] Synchronization error: " << int(buffer[0]) << '\n';
+                break;
+            }
+
+            reply = "400";
+            send(client_socket, reply.c_str(), reply.size(), 0);
+            waitKey(1);
 
             if(GetAsyncKeyState('Q') & 0x8000){
                 cout << "[i] Shutting down server...\n";
@@ -138,61 +159,15 @@ int args(int argc, char* argv[]){
                 return 1;
             }
         }
-        else if(arg == "--width" || arg == "-w"){
-            if(i+1 < argc){
-                try{
-                    WIDTH = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --width invalid number\n";
-                    return 1;
-                }
-            }
-            else{
-                cout << "[e] --width requires a horizontal resolution\n";
-                return 1;
-            }
-        }
-        else if(arg == "--height" || arg == "-h"){
-            if(i+1 < argc){
-                try{
-                    HEIGHT = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --height invalid number\n";
-                    return 1;
-                }
-            }
-            else{
-                cout << "[e] --height requires a vertical resolution\n";
-                return 1;
-            }
-        }
-        else if(arg == "--cams" || arg == "-c"){
-            if(i+1 < argc){
-                try{
-                    CAMS = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --cams invalid number\n";
-                    return 1;
-                }
-            }
-            else{
-                cout << "[e] --cams requires a camera amount\n";
-                return 1;
-            }
-        }
         else if(arg == "--help" || arg == "-H"){
-            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
+            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n";
             return 1;
         }
         else if(arg == "--verbose" || arg == "-v") VERBOSE = true;
         else{
-            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number>\t\t= Number of camera transmissions to receive\n";
+            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n";
             return 1;
         }
     }
-    BUFFER_SIZE = HEIGHT * WIDTH + 32;
     return 0;
 }
