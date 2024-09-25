@@ -61,15 +61,16 @@ int main(int argc, char* argv[]){
         while(1){
             bytes_received = recv(client_socket, recv_buffer.data(), BUFFER_SIZE, 0);
             if(bytes_received > 0){
-                //aqui
                 string reply(recv_buffer.data(), bytes_received);
                 if(reply == "401"){
-                    vector<char> handshake{char(0), char(WIDTH & 0xFF), char((WIDTH >> 8) & 0xFF), char((WIDTH >> 16) & 0xFF), char((WIDTH >> 24) & 0xFF), char(HEIGHT & 0xFF), char((HEIGHT >> 8) & 0xFF), char((HEIGHT >> 16) & 0xFF), char((HEIGHT >> 24) & 0xFF), char(MODE), char(CAMS)};
-                    bytes_sent = send(client_socket, handshake.data(), handshake.size(), 0);
+                    waitKey(1000);
+                    int handshake[5] = {0, WIDTH, HEIGHT, MODE, CAMS};
+                    bytes_sent = send(client_socket, (char*)handshake, sizeof(handshake), 0);
                     if(bytes_sent == SOCKET_ERROR){
                         cout << "[e] Send failed. Error Code: " << WSAGetLastError() << '\n';
                         break;
                     }
+                    cout << "[i] Handshake replied\n";
                 }
                 else if(reply == "400"){
                     cap >> frame;
@@ -79,7 +80,7 @@ int main(int argc, char* argv[]){
                     }
                     imencode(".jpg", frame, img_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
                     img_buffer.insert(img_buffer.begin(), char(packet_number));
-                    img_buffer.insert(img_buffer.begin(), char(0));
+                    img_buffer.insert(img_buffer.begin(), char(1));
                     bytes_sent = send(client_socket, reinterpret_cast<const char*>(img_buffer.data()), img_buffer.size(), 0);
                     cout << "[send] " << fixed << setprecision(2) << img_buffer.size()/1000.0 << " kB\t" << "packet #" << packet_number << '\n';
                     if(bytes_sent == SOCKET_ERROR){

@@ -54,14 +54,29 @@ int main(int argc, char* argv[]){
         }
         cout << "[i] Connection accepted\n";
 
-        int prev_packet = 0, lost_packets = 0;
+        int prev_packet = -1, lost_packets = 0, handshake[5];
         vector<char> buffer(BUFFER_SIZE);
         string reply = "401";
 
         send(client_socket, reply.c_str(), reply.size(), 0);
-        cout << "[i] Handshake sent. Awaiting response...\n";
+        cout << "[i] Handshake initiated. Awaiting response...\n";
+        recv(client_socket, (char*)handshake, BUFFER_SIZE, 0);
+        if(handshake[0] != 0){
+            cout << "[e] Synchronization error: " << handshake[0] << '\n';
+            return 1;
+        }
+        cout << "[i] Handshake complete. Awaiting frames...\n";
+        WIDTH = handshake[1];
+        HEIGHT = handshake[2];
+        MODE = handshake[3];
+        CAMS = handshake[4];
+        BUFFER_SIZE = WIDTH*HEIGHT + 32;
+        buffer.resize(BUFFER_SIZE);
 
+        reply = "400";
+        send(client_socket, reply.c_str(), reply.size(), 0);
         auto prev = high_resolution_clock().now();
+
         while(1){
             int bytes_received;
             vector<uchar> img_data;
@@ -76,29 +91,19 @@ int main(int argc, char* argv[]){
             }
             cout << "[recv] " << fixed << setprecision(2) << bytes_received/1000.0 << " kB\t";
 
-            if(int(buffer[0]) == 0){
-                WIDTH = (int(buffer[1])) | (int(buffer[2]) << 8) | (int(buffer[3]) << 16) | (int(buffer[4]) << 24);
-                HEIGHT = (int(buffer[5])) | (int(buffer[6]) << 8) | (int(buffer[7]) << 16) | (int(buffer[8]) << 24);
-                MODE = int(buffer[9]);
-                CAMS = int(buffer[10]);
-                if(BUFFER_SIZE < (WIDTH*HEIGHT)+32){
-                    BUFFER_SIZE = WIDTH * HEIGHT + 32;
-                    buffer.resize(BUFFER_SIZE);
-                }
-                cout << "[i] Handshake complete. Awaiting messages...\n";
-            }
-            else if(int(buffer[0]) == 1){
-                if(buffer[1] == 99){
+            if(int(buffer[0]) == 1){
+                if(prev_packet == 99){
                     prev_packet = -1;
                     lost_packets = 0;
                 }
-                else if(buffer[1] != prev_packet+1) lost_packets++;
+                else if(int(buffer[1]) != prev_packet+1) lost_packets++;
+                prev_packet = int(buffer[1]);
                 if(MODE == 0){
-                    img_data.insert(img_data.end(), buffer.begin()+1, buffer.end());
+                    img_data.insert(img_data.end(), buffer.begin()+2, buffer.end());
                     auto curr = high_resolution_clock().now();
                     auto duration = duration_cast<milliseconds>(curr-prev);
                     prev = high_resolution_clock().now();
-                    cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t" << 100-lost_packets << "% packet loss\n";
+                    cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t" << lost_packets << "% packet loss\n";
                     Mat img = imdecode(img_data, IMREAD_COLOR);
                     if(!img.empty()) {
                         imshow("Received image", img);
@@ -109,7 +114,7 @@ int main(int argc, char* argv[]){
             }
             else{
                 cout << "[e] Synchronization error: " << int(buffer[0]) << '\n';
-                break;
+                return 1;
             }
 
             reply = "400";
@@ -131,7 +136,7 @@ int main(int argc, char* argv[]){
 
         cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
         Sleep(3000);
-        attempt++;
+        attempt++; 
     }
 
     cout << "[i] Shutting down server...\n";

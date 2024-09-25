@@ -73,11 +73,11 @@ To change application settings without the need to modify the source code and re
 
 #### General options
 
-| Flag             | Argument   | Setting              | Default |
-|------------------|------------|----------------------|---------|
-| `-H` `--help`    |            | Displays  options    |         |
-| `-v` `--verbose` |            | Verbose console logs | false   |
-| `-p` `--port`    | port       | TCP port             | 8080    |
+| Flag             | Argument | Setting              | Default |
+|------------------|----------|----------------------|---------|
+| `-H` `--help`    |          | Displays  options    |         |
+| `-v` `--verbose` |          | Verbose console logs | false   |
+| `-p` `--port`    | port     | TCP port             | 8080    |
 
 #### Client specific options 
 
@@ -90,12 +90,14 @@ To change application settings without the need to modify the source code and re
 | `-h` `--height`  | pixels     | Vertical video resolution   | 720                   |
 | `-q` `--quality` | number     | Video image quality (1-100) | 50                    |
 
+Any changes made to the client will be communicated to the server automatically during the initial handshake, with the notable exception of the port, since communication cannot be established without a common port.
+
 ## Transmission modes
 
 Depending on the network infrastructure and available bandwith, you may want to prioritize frame rate, connection stability, image quality, etc. This can be achieved by changing the argument of the `--mode` flag on the client executable, and the server will adapt automatically:
 
 - `0` __Bundles__: All video source frames are compresed and merged into one packet, which is transmitted in a single transaction. Keeps the frame rate relatively unchanged, but packet size increases linearly with the number of sources (if kept at the same quality and resolution).
-- `1` __Swaps__: Video source frames are put into separate packets, which are then sent one after the other in a single transaction. Keeps the packet size unchanged, but the frame rate is effectively divided by the number of sources.
+- `1` __Swaps__ (WIP): Video source frames are put into separate packets, which are then sent one after the other in a single transaction. Keeps the packet size unchanged, but the frame rate is effectively divided by the number of sources.
 
 > More coming soon
 
@@ -105,7 +107,8 @@ All applications regularly print console messages of different types (to receive
 - `[i]` __Information__: Provides updates as to what the program is currently doing. When followed by `...`, it means the program is awaiting a response from a blocking function.
 - `[w]` __Warning__: Alerts about a non fatal error, most likely caused by the remote peer. Usually followed by an attempt to reset the connection.
 - `[e]` __Error__: Gives out an error number and message relating to what went wrong, followed by ending the program. Usually caused by an internal problem or a fatal cononection loss.
-- `[recv]` __Received__: Shows relevant information about the latest transaction (packet size, response code, current frame rate, etc.). 
+- `[recv]` __Received__: Shows relevant information about the latest packet received (size, loss, frame rate, etc.).
+- `[send]` __Send__: Shows relevant information about the latest packet sent (size, number, etc.).
 - __Dependency warnings and info__: OpenCV, Winsock, CMake and g++ tend to print out compilation warnings and information throughout the execution of the applications. They can be safely ingnored as long as they don't include any errors.
 
 ## Author
