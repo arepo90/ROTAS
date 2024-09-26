@@ -139,11 +139,10 @@ int main(int argc, char* argv[]){
                 cout << "[e] Receive failed. Error Code: " << err << '\n';
                 break;
             }
-
-            close(client_socket);
-            cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
-            attempt++;
         }
+        close(client_socket);
+        cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
+        attempt++;
     }
     
     cout << "[i] Shutting down client...\n";
