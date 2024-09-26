@@ -41,85 +41,110 @@ int main(int argc, char* argv[]){
     }
 
     while(1){
-        bytes_received = recv(client_socket, recv_buffer.data(), BUFFER_SIZE, 0);
-        if(bytes_received > 0){
-            string reply(recv_buffer.data(), bytes_received);
-            if(reply == "401"){
-                int handshake[5] = {0, WIDTH, HEIGHT, MODE, CAMS.size()};
-                bytes_sent = send(client_socket, (char*)handshake, sizeof(handshake), 0);
-                if(bytes_sent < 0){
-                    int err = errno;
-                    cout << "[e] Send failed. Error Code: " << err << '\n';
-                    break;
-                }
-                cout << "[i] Handshake replied\n";
-            }
-            else if(reply == "400"){
-                if(MODE == 0){
-                    sources[0] >> frame;
-                    if(frame.empty()){
-                        cout << "[e] Failed to capture frame\n";
+        cout << "[i] Initializing client...\n";
+        if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0){
+            cout << "[e] Failed to initialize Winsock. Error Code: " << WSAGetLastError() << '\n';
+            return 1;
+        }
+        if((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET){
+            cout << "[e] Socket creation failed. Error Code: " << WSAGetLastError() << '\n';
+            return 1;
+        }
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_addr.s_addr = inet_addr(SERVER_IP.c_str());
+        server_addr.sin_port = htons(PORT);
+
+        if(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR){
+            cout << "[e] Connection failed. Error Code: " << WSAGetLastError() << '\n';
+            closesocket(client_socket);
+            cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
+            Sleep(3000);
+            attempt++;
+            continue;
+        }
+        cout << "[i] Connected to server\n";
+
+        while(1){
+            bytes_received = recv(client_socket, recv_buffer.data(), BUFFER_SIZE, 0);
+            if(bytes_received > 0){
+                string reply(recv_buffer.data(), bytes_received);
+                if(reply == "401"){
+                    int handshake[5] = {0, WIDTH, HEIGHT, MODE, CAMS.size()};
+                    bytes_sent = send(client_socket, (char*)handshake, sizeof(handshake), 0);
+                    if(bytes_sent < 0){
+                        int err = errno;
+                        cout << "[e] Send failed. Error Code: " << err << '\n';
                         break;
                     }
-                    imencode(".jpg", frame, img_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
-                    img_buffer.insert(img_buffer.begin(), char(packet_number));
-                    img_buffer.insert(img_buffer.begin(), char(1));
+                    cout << "[i] Handshake replied\n";
                 }
-                else if(MODE == 1){
-                    vector<uchar> frame_buffer;
-                    img_buffer.insert(img_buffer.begin(), char(packet_number));
-                    img_buffer.insert(img_buffer.begin(), char(1));
-                    for(int i = 0; i < CAMS.size(); i++){
-                        int frame_size;
-                        sources[i] >> frame;
+                else if(reply == "400"){
+                    if(MODE == 0){
+                        sources[0] >> frame;
                         if(frame.empty()){
-                            cout << "[e] Failed to capture frame from source " << i << '\n';
+                            cout << "[e] Failed to capture frame\n";
                             break;
                         }
-                        imencode(".jpg", frame, frame_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
-                        frame_size = frame_buffer.size();
-                        uchar size_buffer[sizeof(int)];
-                        memcpy(size_buffer, &frame_size, sizeof(int));
-                        img_buffer.insert(img_buffer.end(), size_buffer, size_buffer+sizeof(int));
-                        img_buffer.insert(img_buffer.end(), frame_buffer.begin(), frame_buffer.end());
-                        frame_buffer.clear();
+                        imencode(".jpg", frame, img_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
+                        img_buffer.insert(img_buffer.begin(), char(packet_number));
+                        img_buffer.insert(img_buffer.begin(), char(1));
                     }
+                    else if(MODE == 1){
+                        vector<uchar> frame_buffer;
+                        img_buffer.insert(img_buffer.begin(), char(packet_number));
+                        img_buffer.insert(img_buffer.begin(), char(1));
+                        for(int i = 0; i < CAMS.size(); i++){
+                            int frame_size;
+                            sources[i] >> frame;
+                            if(frame.empty()){
+                                cout << "[e] Failed to capture frame from source " << i << '\n';
+                                break;
+                            }
+                            imencode(".jpg", frame, frame_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
+                            frame_size = frame_buffer.size();
+                            uchar size_buffer[sizeof(int)];
+                            memcpy(size_buffer, &frame_size, sizeof(int));
+                            img_buffer.insert(img_buffer.end(), size_buffer, size_buffer+sizeof(int));
+                            img_buffer.insert(img_buffer.end(), frame_buffer.begin(), frame_buffer.end());
+                            frame_buffer.clear();
+                        }
+                    }
+                    else if(MODE >= 2){
+                        cout << "WIP\n";
+                        return 0;
+                    }
+                    else{
+                        cout << "[e] Mode error: " << MODE << '\n';
+                        return 1;
+                    }
+                    bytes_sent = send(client_socket, reinterpret_cast<const char*>(img_buffer.data()), img_buffer.size(), 0);
+                    cout << "[send] " << fixed << setprecision(2) << img_buffer.size()/1000.0 << " kB\t" << "packet #" << packet_number << '\n';
+                    if(bytes_sent < 0){
+                        int err = errno;
+                        cout << "[e] Send failed. Error Code: " << err << '\n';
+                        break;
+                    }
+                    packet_number++;
+                    packet_number %= 100;
+                    recv_buffer.clear();
+                    img_buffer.clear();
                 }
-                else if(MODE >= 2){
-                    cout << "WIP\n";
-                    return 0;
-                }
-                else{
-                    cout << "[e] Mode error: " << MODE << '\n';
-                    return 1;
-                }
-                bytes_sent = send(client_socket, reinterpret_cast<const char*>(img_buffer.data()), img_buffer.size(), 0);
-                cout << "[send] " << fixed << setprecision(2) << img_buffer.size()/1000.0 << " kB\t" << "packet #" << packet_number << '\n';
-                if(bytes_sent < 0){
-                    int err = errno;
-                    cout << "[e] Send failed. Error Code: " << err << '\n';
-                    break;
-                }
-                packet_number++;
-                packet_number %= 100;
-                recv_buffer.clear();
-                img_buffer.clear();
+                else cout << "[w] Unexpected reply from server: " << reply << '\n';
             }
-            else cout << "[w] Unexpected reply from server: " << reply << '\n';
-        }
-        else if(bytes_received == 0){
-            cout << "[w] Connection closed by server\n";
-            break;
-        }
-        else{
-            int err = errno;
-            cout << "[e] Receive failed. Error Code: " << err << '\n';
-            break;
-        }
+            else if(bytes_received == 0){
+                cout << "[w] Connection closed by server\n";
+                break;
+            }
+            else{
+                int err = errno;
+                cout << "[e] Receive failed. Error Code: " << err << '\n';
+                break;
+            }
 
-        close(client_socket);
-        cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
-        attempt++;
+            close(client_socket);
+            cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
+            attempt++;
+        }
     }
     
     cout << "[i] Shutting down client...\n";
