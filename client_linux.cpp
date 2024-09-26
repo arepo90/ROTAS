@@ -42,23 +42,22 @@ int main(int argc, char* argv[]){
 
     while(1){
         cout << "[i] Initializing client...\n";
-        if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0){
-            cout << "[e] Failed to initialize Winsock. Error Code: " << WSAGetLastError() << '\n';
-            return 1;
-        }
-        if((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET){
-            cout << "[e] Socket creation failed. Error Code: " << WSAGetLastError() << '\n';
+        if((client_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+            cout << "[e] Socket creation failed\n";
             return 1;
         }
         server_addr.sin_family = AF_INET;
-        server_addr.sin_addr.s_addr = inet_addr(SERVER_IP.c_str());
-        server_addr.sin_port = htons(PORT);
+        server_addr.sin_port = htons(8080);
+        if(inet_pton(AF_INET, SERVER_IP.c_str(), &server_addr.sin_addr) <= 0){
+            cout << "[e] Invalid address or address not supported\n";
+            return 1;
+        }
 
-        if(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR){
-            cout << "[e] Connection failed. Error Code: " << WSAGetLastError() << '\n';
-            closesocket(client_socket);
+        if(connect(client_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) < 0){
+            int err = errno;
+            cout << "[e] Connection failed. Error Code: " << err << '\n';
+            close(client_socket);
             cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
-            Sleep(3000);
             attempt++;
             continue;
         }
