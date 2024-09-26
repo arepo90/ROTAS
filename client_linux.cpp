@@ -26,7 +26,7 @@ int main(int argc, char* argv[]){
     vector<char> recv_buffer(BUFFER_SIZE);
 
     cout << "[i] Initializing capture devices...\n";
-    vector<VideoCapture> sourcs(CAMS.size());
+    vector<VideoCapture> sources(CAMS.size());
     Mat frame;
     vector<uchar> img_buffer;
     int bytes_received, bytes_sent, packet_number = 0;
