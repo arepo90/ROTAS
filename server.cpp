@@ -55,7 +55,7 @@ int main(int argc, char* argv[]){
         cout << "[i] Connection accepted\n";
 
         int prev_packet = -1, lost_packets = 0, handshake[5];
-        vector<char> buffer(BUFFER_SIZE);
+        vector<uchar> buffer(BUFFER_SIZE);
         string reply = "401";
 
         send(client_socket, reply.c_str(), reply.size(), 0);
@@ -80,7 +80,7 @@ int main(int argc, char* argv[]){
         while(1){
             int bytes_received;
             vector<uchar> img_data;
-            bytes_received = recv(client_socket, buffer.data(), BUFFER_SIZE, 0);
+            bytes_received = recv(client_socket, reinterpret_cast<char*>(buffer.data()), BUFFER_SIZE, 0);
             if(bytes_received == SOCKET_ERROR){
                 cout << "[e] Receive failed. Error Code: " << WSAGetLastError() << '\n';
                 break;
@@ -90,7 +90,6 @@ int main(int argc, char* argv[]){
                 break;
             }
             cout << "[recv] " << fixed << setprecision(2) << bytes_received/1000.0 << " kB\t";
-
             if(int(buffer[0]) == 1){
                 if(prev_packet == 99){
                     prev_packet = -1;
@@ -98,19 +97,45 @@ int main(int argc, char* argv[]){
                 }
                 else if(int(buffer[1]) != prev_packet+1) lost_packets++;
                 prev_packet = int(buffer[1]);
+                img_data.insert(img_data.end(), buffer.begin()+2, buffer.end());
                 if(MODE == 0){
-                    img_data.insert(img_data.end(), buffer.begin()+2, buffer.end());
-                    auto curr = high_resolution_clock().now();
-                    auto duration = duration_cast<milliseconds>(curr-prev);
-                    prev = high_resolution_clock().now();
-                    cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t" << lost_packets << "% packet loss\n";
                     Mat img = imdecode(img_data, IMREAD_COLOR);
                     if(!img.empty()) {
                         imshow("Received image", img);
                         waitKey(1);
                     }
+                    else cout << "[w] Empty image received\n";
                     img_data.clear();
                 }
+                else if(MODE == 1){
+                    int frame_size, offset = 0;
+                    for(int i = 0; i < CAMS; i++){
+                        memcpy(&frame_size, &img_data[offset], sizeof(int));
+                        offset += sizeof(int);
+                        vector<uchar> frame_buffer(img_data.begin()+offset, img_data.begin()+offset+frame_size);
+                        offset += frame_size;
+                        Mat img = imdecode(frame_buffer, IMREAD_COLOR);
+                        if(!img.empty()){
+                            string title = "Source " + to_string(i);
+                            imshow(title, img);
+                            waitKey(1);
+                        }
+                        else cout << "[w] Empty image received\n";
+                    }
+                    img_data.clear();
+                }
+                else if(MODE == 2){
+                    cout << "WIP\n";
+                    return 0;
+                }
+                else{
+                    cout << "[e] Mode error: " << MODE << '\n';
+                    return 1;
+                }
+                auto curr = high_resolution_clock().now();
+                auto duration = duration_cast<milliseconds>(curr-prev);
+                prev = high_resolution_clock().now();
+                cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t" << lost_packets << "% packet loss\n";
             }
             else{
                 cout << "[e] Synchronization error: " << int(buffer[0]) << '\n';

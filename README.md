@@ -81,14 +81,16 @@ To change application settings without the need to modify the source code and re
 
 #### Client specific options 
 
-| Flag             | Argument   | Setting                     | Default               |
-|------------------|------------|-----------------------------|-----------------------|
-| `-i` `--ip`      | address    | Server IP address           | 127.0.0.1 (localhost) |
-| `-m` `--mode`    | number     | [Transmission mode](#Transmission-modes) | 0        |
-| `-c` `--cams`    | number     | Number of camera sources    | 1                     |
-| `-w` `--width`   | pixels     | Horizontal video resolution | 1280                  |
-| `-h` `--height`  | pixels     | Vertical video resolution   | 720                   |
-| `-q` `--quality` | number     | Video image quality (1-100) | 50                    |
+| Flag             | Argument    | Setting                     | Default               |
+|------------------|-------------|-----------------------------|-----------------------|
+| `-i` `--ip`      | address     | Server IP address           | 127.0.0.1 (localhost) |
+| `-m` `--mode`    | number      | [Transmission mode](#Transmission-modes) | 0        |
+| `-c` `--cams`    | number list | List of camera sources      | 1 0                   |
+| `-w` `--width`   | pixels      | Horizontal video resolution | 1280                  |
+| `-h` `--height`  | pixels      | Vertical video resolution   | 720                   |
+| `-q` `--quality` | number      | Video image quality (1-100) | 50                    |
+
+Camera source ports tend to be in order starting from 0, but this is not always the case. To verify, run the `cam_detection.py` script and use the `--cams` flag to specify the ports.
 
 Any changes made to the client will be communicated to the server automatically during the initial handshake, with the notable exception of the port, since communication cannot be established without a common port.
 
@@ -96,8 +98,9 @@ Any changes made to the client will be communicated to the server automatically 
 
 Depending on the network infrastructure and available bandwith, you may want to prioritize frame rate, connection stability, image quality, etc. This can be achieved by changing the argument of the `--mode` flag on the client executable, and the server will adapt automatically:
 
-- `0` __Bundles__: All video source frames are compresed and merged into one packet, which is transmitted in a single transaction. Keeps the frame rate relatively unchanged, but packet size increases linearly with the number of sources (if kept at the same quality and resolution).
-- `1` __Swaps__ (WIP): Video source frames are put into separate packets, which are then sent one after the other in a single transaction. Keeps the packet size unchanged, but the frame rate is effectively divided by the number of sources.
+- `0` __Single__: For testing purposes. Only the first camera source will be transmitted.
+- `1` __Bundles__: All video source frames are compresed and merged into one packet, which is transmitted in a single transaction. Every source's frame is guaranteed to by in sync, but packet size increases linearly with the number of sources.
+- `2` __Swaps__ (WIP): Video source frames are put into separate packets, which are then sent one after the other in a single transaction. Keeps the packet size unchanged, but frames may become out of sync because of packet loss.
 
 > More coming soon
 
