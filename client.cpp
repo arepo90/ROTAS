@@ -67,7 +67,6 @@ int main(int argc, char* argv[]){
             if(bytes_received > 0){
                 string reply(recv_buffer.data(), bytes_received);
                 if(reply == "401"){
-                    waitKey(1000);
                     int handshake[5] = {0, WIDTH, HEIGHT, MODE, CAMS.size()};
                     bytes_sent = send(client_socket, (char*)handshake, sizeof(handshake), 0);
                     if(bytes_sent == SOCKET_ERROR){
