@@ -1,174 +1,144 @@
-#include <iostream>
 #include <opencv2/opencv.hpp>
 #include <winsock2.h>
-#include <windows.h>
-#include <chrono>
-#include <iomanip>
+#include <ws2tcpip.h>
+#include <iostream>
+#include <vector>
+#include <thread>
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
 using namespace cv;
-using namespace chrono;
 
+vector<pair<int, int>> PACKETS;
+int PORT = 8080, NUM_CAMS = 1, MODE = 0;
 bool VERBOSE = false;
-int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, MODE = 0, CAMS = 1;
 
 int args(int argc, char* argv[]);
+bool handshake(SOCKET client_socket);
+void cnlog(const string& str, int lvl);
+void handleClient(SOCKET client_socket, int index);
 
 int main(int argc, char* argv[]){
-    if(args(argc, argv)) return 1;
+    if(args(argc, argv)) return -1;
+    cnlog("[i] Initializing server...", 2);
 
     WSADATA wsaData;
-    SOCKET server_socket, client_socket;
-    struct sockaddr_in server_addr, client_addr;
-    int addr_len = sizeof(client_addr), attempt = 1;
+    vector<SOCKET> server_sockets(NUM_CAMS);
+    vector<thread> client_threads(NUM_CAMS);
 
-    while(1){
-        cout << "[i] Initializing server...\n";
-
-        if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0){
-            cout << "[e] Failed to initialize Winsock. Error Code: " << WSAGetLastError() << '\n';
-            return 1;
-        }
-        if((server_socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET){
-            cout << "[e] Socket creation failed. Error Code: " << WSAGetLastError() << '\n';
-            return 1;
-        }
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_addr.s_addr = INADDR_ANY;
-        server_addr.sin_port = htons(PORT);
-
-        if(::bind(server_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR){
-            cout << "[e] Bind failed. Error Code: " << WSAGetLastError() << '\n';
-            closesocket(server_socket);
-            return 1;
-        }
-
-        listen(server_socket, 3);
-        cout << "[i] Waiting for connections...\n";
-
-        if((client_socket = accept(server_socket, (struct sockaddr*)&client_addr, &addr_len)) == INVALID_SOCKET){
-            cout << "[e] Accept failed. Error Code: " << WSAGetLastError() << '\n';
-            closesocket(server_socket);
-            return 1;
-        }
-        cout << "[i] Connection accepted\n";
-
-        int prev_packet = -1, lost_packets = 0, handshake[5];
-        vector<uchar> buffer(BUFFER_SIZE);
-        string reply = "401";
-
-        send(client_socket, reply.c_str(), reply.size(), 0);
-        cout << "[i] Handshake initiated. Awaiting response...\n";
-        recv(client_socket, (char*)handshake, BUFFER_SIZE, 0);
-        if(handshake[0] != 0){
-            cout << "[e] Synchronization error: " << handshake[0] << '\n';
-            return 1;
-        }
-        cout << "[i] Handshake complete. Awaiting frames...\n";
-        WIDTH = handshake[1];
-        HEIGHT = handshake[2];
-        MODE = handshake[3];
-        CAMS = handshake[4];
-        BUFFER_SIZE = WIDTH*HEIGHT + 32;
-        buffer.resize(BUFFER_SIZE);
-
-        reply = "400";
-        send(client_socket, reply.c_str(), reply.size(), 0);
-        auto prev = high_resolution_clock().now();
-
-        while(1){
-            int bytes_received;
-            vector<uchar> img_data;
-            bytes_received = recv(client_socket, reinterpret_cast<char*>(buffer.data()), BUFFER_SIZE, 0);
-            if(bytes_received == SOCKET_ERROR){
-                cout << "[e] Receive failed. Error Code: " << WSAGetLastError() << '\n';
-                break;
-            }
-            else if(bytes_received == 0){
-                cout << "[w] Connection closed by client\n";
-                break;
-            }
-            cout << "[recv] " << fixed << setprecision(2) << bytes_received/1000.0 << " kB\t";
-            if(int(buffer[0]) == 1){
-                if(prev_packet == 99){
-                    prev_packet = -1;
-                    lost_packets = 0;
-                }
-                else if(int(buffer[1]) != prev_packet+1) lost_packets++;
-                prev_packet = int(buffer[1]);
-                img_data.insert(img_data.end(), buffer.begin()+2, buffer.end());
-                if(MODE == 0){
-                    Mat img = imdecode(img_data, IMREAD_COLOR);
-                    if(!img.empty()) {
-                        imshow("Received image", img);
-                        waitKey(1);
-                    }
-                    else cout << "[w] Empty image received\n";
-                    img_data.clear();
-                }
-                else if(MODE == 1){
-                    int frame_size, offset = 0;
-                    for(int i = 0; i < CAMS; i++){
-                        memcpy(&frame_size, &img_data[offset], sizeof(int));
-                        offset += sizeof(int);
-                        vector<uchar> frame_buffer(img_data.begin()+offset, img_data.begin()+offset+frame_size);
-                        offset += frame_size;
-                        Mat img = imdecode(frame_buffer, IMREAD_COLOR);
-                        if(!img.empty()){
-                            string title = "Source " + to_string(i);
-                            imshow(title, img);
-                            waitKey(1);
-                        }
-                        else cout << "[w] Empty image received\n";
-                    }
-                    img_data.clear();
-                }
-                else if(MODE == 2){
-                    cout << "WIP\n";
-                    return 0;
-                }
-                else{
-                    cout << "[e] Mode error: " << MODE << '\n';
-                    return 1;
-                }
-                auto curr = high_resolution_clock().now();
-                auto duration = duration_cast<milliseconds>(curr-prev);
-                prev = high_resolution_clock().now();
-                cout << "@ " << fixed << setprecision(2) << 1000.0/duration.count() << " fps\t" << lost_packets << "% packet loss\n";
-            }
-            else{
-                cout << "[e] Synchronization error: " << int(buffer[0]) << '\n';
-                return 1;
-            }
-
-            reply = "400";
-            send(client_socket, reply.c_str(), reply.size(), 0);
-            waitKey(1);
-
-            if(GetAsyncKeyState('Q') & 0x8000){
-                cout << "[i] Shutting down server...\n";
-                closesocket(client_socket);
-                closesocket(server_socket);
-                WSACleanup();
-                return 0;
-            }
-        }
-
-        closesocket(client_socket);
-        closesocket(server_socket);
-        WSACleanup();
-
-        cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
-        Sleep(3000);
-        attempt++; 
+    if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0){
+        cnlog("[e] Failed to initialize Winsock", 0);
+        return -1;
     }
 
-    cout << "[i] Shutting down server...\n";
-    closesocket(client_socket);
-    closesocket(server_socket);
+    cnlog("[i] Initializing socket threads...", 2);
+    for(int i = 0; i < NUM_CAMS; i++){
+        server_sockets[i] = socket(AF_INET, SOCK_STREAM, 0);
+        if(server_sockets[i] == INVALID_SOCKET){
+            cnlog("[e] Could not create server socket", 0);
+            WSACleanup();
+            return -1;
+        }
+        sockaddr_in server_addr;
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(PORT + i);
+        server_addr.sin_addr.s_addr = INADDR_ANY;
+        if(::bind(server_sockets[i], (sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR){
+            cnlog("[e] Could not bind to port " + to_string(PORT+i), 0);
+            closesocket(server_sockets[i]);
+            WSACleanup();
+            return -1;
+        }
+        if(listen(server_sockets[i], 5) == SOCKET_ERROR){
+            cnlog("[e] Could not listen on port " + to_string(PORT+i), 0);
+            closesocket(server_sockets[i]);
+            WSACleanup();
+            return -1;
+        }
+        cnlog("[i] Server listening on port " + to_string(PORT+i) + " for source " + to_string(i) + "...", 2);
+    }
+
+    for(int i = 0; i < NUM_CAMS; i++){
+        sockaddr_in client_addr;
+        int client_len = sizeof(client_addr);
+        SOCKET client_socket = accept(server_sockets[i], (sockaddr*)&client_addr, &client_len);
+        if(client_socket == INVALID_SOCKET){
+            cnlog("[e] Could not accept client connection", 0);
+            closesocket(server_sockets[i]);
+            WSACleanup();
+            return -1;
+        }
+        if(i == 0 && !handshake(client_socket)){
+            cnlog("[i] Shutting down server...", 2);
+            closesocket(client_socket);
+            for(int j = 0; j < NUM_CAMS; j++){
+                closesocket(server_sockets[j]);
+            }
+            WSACleanup();
+            return -1;
+        }
+        client_threads[i] = thread(handleClient, client_socket, i);
+    }
+
+    cnlog("[i] Shutting down server...", 2);
+    for(int i = 0; i < NUM_CAMS; i++){
+        if(client_threads[i].joinable()) client_threads[i].join();
+        closesocket(server_sockets[i]);
+    }
     WSACleanup();
     return 0;
+}
+
+void cnlog(const string& str, int lvl){
+    if(VERBOSE || lvl == 0) cout << str << '\n';
+}
+
+bool handshake(SOCKET client_socket){
+    cnlog("[i] Initializing handshake...", 2);
+    int handshakeMessage[3], handshakeAck = 400;
+    if(recv(client_socket, (char*)handshakeMessage, sizeof(handshakeMessage), 0) <= 0){
+        cnlog("[e] Did not receive handshake", 0);
+        return false;
+    }
+    if(handshakeMessage[0] != 0){
+        cnlog("[e] Invalid handshake message", 0);
+        return false;
+    }
+    MODE = handshakeMessage[1];
+    NUM_CAMS = handshakeMessage[2];
+    PACKETS.resize(NUM_CAMS, {-1, 0});
+    if(send(client_socket, (char*)&handshakeAck, sizeof(handshakeAck), 0) == SOCKET_ERROR){
+        cnlog("[e] Could not send handshake acknowledgment", 0);
+        return false;
+    }
+    cnlog("[i] Handshake complete", 2);
+    return true;
+}
+
+void handleClient(SOCKET client_socket, int index){
+    int metadata[2];
+    vector<uchar> buffer;
+    while(1){
+        int bytesReceived = recv(client_socket, (char*)metadata, sizeof(metadata), 0);
+        if(bytesReceived <= 0) break;
+        buffer.resize(metadata[0]);
+        if(PACKETS[index].first == 99){
+            PACKETS[index].first = -1;
+            PACKETS[index].second = 0;
+        }
+        else if(int(metadata[1]) != PACKETS[index].first+1) PACKETS[index].second++;
+        PACKETS[index].first = metadata[1];
+        bytesReceived = recv(client_socket, (char*)buffer.data(), metadata[0], 0);
+        if(bytesReceived <= 0) break;
+        Mat frame = imdecode(buffer, IMREAD_COLOR);
+        if(frame.empty()) continue;
+        imshow("Source " + to_string(index), frame);
+        stringstream stream;
+        stream << "[recv" << index << "] " << fixed << setprecision(2) << bytesReceived/1000.0 << " kB\t" << PACKETS[index].second << "% packet loss";
+        cnlog(stream.str(), 2);
+        if(waitKey(1) == 'q') break;
+    }
+    closesocket(client_socket);
 }
 
 int args(int argc, char* argv[]){
@@ -192,6 +162,21 @@ int args(int argc, char* argv[]){
         else if(arg == "--help" || arg == "-H"){
             cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n";
             return 1;
+        }
+        else if(arg == "--cams" || arg == "-c"){
+            if(i+1 < argc){
+                try{
+                    NUM_CAMS = atoi(argv[++i]);
+                }
+                catch(const invalid_argument&){
+                    cout << "[e] --cams invalid number\n";
+                    return 1;
+                }
+            }
+            else{
+                cout << "[e] --cams requires a source number\n";
+                return 1;
+            }
         }
         else if(arg == "--verbose" || arg == "-v") VERBOSE = true;
         else{

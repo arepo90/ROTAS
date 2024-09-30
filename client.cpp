@@ -1,166 +1,144 @@
-#include <iostream>
 #include <opencv2/opencv.hpp>
 #include <winsock2.h>
+#include <ws2tcpip.h>
 #include <windows.h>
+#include <iostream>
+#include <vector>
 #pragma comment(lib, "ws2_32.lib")
 
 using namespace std;
 using namespace cv;
 
 string SERVER_IP = "127.0.0.1";
-bool VERBOSE = false;
-int PORT = 8080, WIDTH = 1280, HEIGHT = 720, BUFFER_SIZE = 1024, QUALITY = 50, MODE = 0;
 vector<int> CAMS{0};
+int PORT = 8080, MODE = 0, WIDTH = 1280, HEIGHT = 720, QUALITY = 75;
+bool VERBOSE = false;
 
 int args(int argc, char* argv[]);
+bool sendPacket(SOCKET socket_fd, vector<uchar>& buffer, int packetNumber);
+bool handshake(SOCKET socket_fd);
+void cnlog(const string& str, int lvl);
 
 int main(int argc, char* argv[]){
-    if(args(argc, argv)) return 1;
+    if(args(argc, argv)) return -1;
+    cnlog("[i] Initializing client...", 2);
 
     WSADATA wsaData;
-    SOCKET client_socket;
-    struct sockaddr_in server_addr;
-    vector<char> recv_buffer(BUFFER_SIZE);
-    int attempt = 1;
-
-    cout << "[i] Initializing capture devices...\n";
+    u_long socket_mode = 1;
+    vector<SOCKET> socket_fds(CAMS.size());
     vector<VideoCapture> sources(CAMS.size());
-    Mat frame;
-    vector<uchar> img_buffer;
-    int bytes_received, bytes_sent, packet_number = 0;
+    vector<vector<uchar>> buffers(CAMS.size());
+    vector<int> packet_numbers(CAMS.size(), 0);
+
+    if(WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        cnlog("[e] Failed to initialize Winsock", 0);
+        return -1;
+    }
+
+    cnlog("[i] Initializing capture devices...", 2);
     for(int i = 0; i < CAMS.size(); i++){
         sources[i].open(CAMS[i]);
         if(!sources[i].isOpened()){
-            cout << "[e] Error opening camera " << i << '\n';
-            return 1;
+            cnlog("[e] Could not open source " + to_string(i), 0);
+            WSACleanup();
+            return -1;
         }
         sources[i].set(CAP_PROP_FRAME_WIDTH, WIDTH);
         sources[i].set(CAP_PROP_FRAME_HEIGHT, HEIGHT);
+        socket_fds[i] = socket(AF_INET, SOCK_STREAM, 0);
+        if(socket_fds[i] == INVALID_SOCKET){
+            cnlog("[e] Could not create socket for source " + to_string(i), 0);
+            WSACleanup();
+            return -1;
+        }
+        ioctlsocket(socket_fds[i], FIONBIO, &socket_mode);
+        sockaddr_in server_addr;
+        server_addr.sin_family = AF_INET;
+        server_addr.sin_port = htons(PORT + i);
+        inet_pton(AF_INET, SERVER_IP.c_str(), &server_addr.sin_addr);
+        connect(socket_fds[i], (sockaddr*)&server_addr, sizeof(server_addr));
+        if(i == 0 && !handshake(socket_fds[i])){
+            for(int j = 0; j < CAMS.size(); j++){
+                closesocket(socket_fds[i]);
+                sources[j].release();
+            }
+            WSACleanup();
+            return -1;
+        }
     }
 
+    cnlog("[i] Starting stream...", 2);
     while(1){
-        cout << "[i] Initializing client...\n";
-        if(WSAStartup(MAKEWORD(2,2), &wsaData) != 0){
-            cout << "[e] Failed to initialize Winsock. Error Code: " << WSAGetLastError() << '\n';
-            return 1;
-        }
-        if((client_socket = socket(AF_INET, SOCK_STREAM, 0)) == INVALID_SOCKET){
-            cout << "[e] Socket creation failed. Error Code: " << WSAGetLastError() << '\n';
-            return 1;
-        }
-        server_addr.sin_family = AF_INET;
-        server_addr.sin_addr.s_addr = inet_addr(SERVER_IP.c_str());
-        server_addr.sin_port = htons(PORT);
-
-        if(connect(client_socket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == SOCKET_ERROR){
-            cout << "[e] Connection failed. Error Code: " << WSAGetLastError() << '\n';
-            closesocket(client_socket);
-            cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
-            Sleep(3000);
-            attempt++;
-            continue;
-        }
-        cout << "[i] Connected to server\n";
-
-        while(1){
-            bytes_received = recv(client_socket, recv_buffer.data(), BUFFER_SIZE, 0);
-            if(bytes_received > 0){
-                string reply(recv_buffer.data(), bytes_received);
-                if(reply == "401"){
-                    int handshake[5] = {0, WIDTH, HEIGHT, MODE, CAMS.size()};
-                    bytes_sent = send(client_socket, (char*)handshake, sizeof(handshake), 0);
-                    if(bytes_sent == SOCKET_ERROR){
-                        cout << "[e] Send failed. Error Code: " << WSAGetLastError() << '\n';
-                        break;
-                    }
-                    cout << "[i] Handshake replied\n";
-                }
-                else if(reply == "400"){
-                    if(MODE == 0){
-                        sources[0] >> frame;
-                        if(frame.empty()){
-                            cout << "[e] Failed to capture frame\n";
-                            break;
-                        }
-                        imencode(".jpg", frame, img_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
-                        img_buffer.insert(img_buffer.begin(), char(packet_number));
-                        img_buffer.insert(img_buffer.begin(), char(1));
-                    }
-                    else if(MODE == 1){
-                        vector<uchar> frame_buffer;
-                        img_buffer.insert(img_buffer.begin(), char(packet_number));
-                        img_buffer.insert(img_buffer.begin(), char(1));
-                        for(int i = 0; i < CAMS.size(); i++){
-                            int frame_size;
-                            sources[i] >> frame;
-                            if(frame.empty()){
-                                cout << "[e] Failed to capture frame from source " << i << '\n';
-                                break;
-                            }
-                            imencode(".jpg", frame, frame_buffer, {IMWRITE_JPEG_QUALITY, QUALITY});
-                            frame_size = frame_buffer.size();
-                            uchar size_buffer[sizeof(int)];
-                            memcpy(size_buffer, &frame_size, sizeof(int));
-                            img_buffer.insert(img_buffer.end(), size_buffer, size_buffer+sizeof(int));
-                            img_buffer.insert(img_buffer.end(), frame_buffer.begin(), frame_buffer.end());
-                            frame_buffer.clear();
-                        }
-                    }
-                    else if(MODE >= 2){
-                        cout << "WIP\n";
-                        return 0;
-                    }
-                    else{
-                        cout << "[e] Mode error: " << MODE << '\n';
-                        return 1;
-                    }
-                    bytes_sent = send(client_socket, reinterpret_cast<const char*>(img_buffer.data()), img_buffer.size(), 0);
-                    cout << "[send] " << fixed << setprecision(2) << img_buffer.size()/1000.0 << " kB\t" << "packet #" << packet_number << '\n';
-                    if(bytes_sent == SOCKET_ERROR){
-                        cout << "[e] Send failed. Error Code: " << WSAGetLastError() << '\n';
-                        break;
-                    }
-                    packet_number++;
-                    packet_number %= 100;
-                    recv_buffer.clear();
-                    img_buffer.clear();
-                }
-                else cout << "[w] Unexpected reply from server: " << reply << '\n';
+        for(int i = 0; i < CAMS.size(); i++){
+            Mat frame;
+            sources[i] >> frame;
+            if(frame.empty()){
+                cnlog("[w] Source " + to_string(i) + " captured an empty frame", 1);
+                continue;
             }
-            else if(bytes_received == 0){
-                cout << "[w] Connection closed by server\n";
-                break;
+            buffers[i].clear();
+            imencode(".jpg", frame, buffers[i], {IMWRITE_JPEG_QUALITY, QUALITY});
+            if(!sendPacket(socket_fds[i], buffers[i], packet_numbers[i]++)){
+                cnlog("[w] Failed to send frame from source " + to_string(i), 1);
+                return 1;
+            }
+            packet_numbers[i] %= 100;
+        }
+        Sleep(30);
+    }
+
+    cnlog("[i] Shutting down client...", 2);
+    for(int i = 0; i < CAMS.size(); i++) {
+        sources[i].release();
+        closesocket(socket_fds[i]);
+    }
+    WSACleanup();
+    return 0;
+}
+
+void cnlog(const string& str, int lvl){
+    if(VERBOSE || lvl == 0) cout << str << '\n';
+}
+
+bool handshake(SOCKET socket_fd){
+    cnlog("[i] Starting handshake...", 2);
+    int handshakeMessage[] = {0, MODE, CAMS.size()}, handshakeAck = 0;
+    if(send(socket_fd, (char*)handshakeMessage, sizeof(handshakeMessage), 0) == SOCKET_ERROR){
+        cnlog("[e] Could not send handshake", 0);
+        return false;
+    }
+    while(1){
+        if(recv(socket_fd, (char*)&handshakeAck, sizeof(handshakeAck), 0) <= 0){ 
+            if(WSAGetLastError() == WSAEWOULDBLOCK){
+                Sleep(50);
+                continue; 
             }
             else{
-                cout << "[e] Receive failed. Error Code: " << WSAGetLastError() << '\n';
-                break;
-            }
-
-            if(GetAsyncKeyState('Q') & 0x8000){
-                cout << "[i] Shutting down client...\n";
-                closesocket(client_socket);
-                WSACleanup();
-                for(int i = 0; i < CAMS.size(); i++){
-                    sources[i].release();
-                }
-                return 0;
+                cnlog("[e] Did not receive handshake acknowledgment. Code: " + to_string(WSAGetLastError()), 0);
+                return false;
             }
         }
+        else break;
+    }
+    if(handshakeAck != 400){
+        cnlog("[e] Invalid handshake response: " + to_string(handshakeAck), 0);
+        return false;
+    }
+    cnlog("[i] Handshake complete", 2);
+    return true;
+}
 
-        closesocket(client_socket);
-        WSACleanup();
-        cout << "[w] Attempt " << attempt << ". Restarting in 3 seconds...\n";
-        Sleep(3000);
-        attempt++;
+bool sendPacket(SOCKET socket_fd, vector<uchar>& buffer, int packet_number){
+    int metadata[] = {buffer.size(), packet_number};
+    if(send(socket_fd, (char*)metadata, sizeof(metadata), 0) == SOCKET_ERROR){
+        cnlog("[e] Metadata send failed. Code: " + to_string(WSAGetLastError()), 0);
+        return false;
     }
-    
-    cout << "[i] Shutting down client...\n";
-    closesocket(client_socket);
-    WSACleanup();
-    for(int i = 0; i < CAMS.size(); i++){
-        sources[i].release();
+    if(send(socket_fd, (char*)buffer.data(), buffer.size(), 0) == SOCKET_ERROR){
+        cnlog("[e] Frame send failed. Code: " + to_string(WSAGetLastError()), 0);
+        return false;
     }
-    return 0;
+    return true;
 }
 
 int args(int argc, char* argv[]){
@@ -243,21 +221,6 @@ int args(int argc, char* argv[]){
             }
             i += n+1;
         }
-        else if(arg == "--buffer" || arg == "-b"){
-            if(i+1 < argc){
-                try{
-                    BUFFER_SIZE = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --buffer invalid number\n";
-                    return 1;
-                }
-            }
-            else{
-                cout << "[e] --buffer requires a camera amount\n";
-                return 1;
-            }
-        }
         else if(arg == "--mode" || arg == "-m"){
             if(i+1 < argc){
                 try{
@@ -289,12 +252,12 @@ int args(int argc, char* argv[]){
             }
         }
         else if(arg == "--help" || arg == "-H"){
-            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number> <list>\t\t= Camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -b <bytes>\t\t= Received messages buffer size\n  -m <number>\t\t= Transmission mode (see README)\n";
+            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number> <list>\t\t= Camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -m <number>\t\t= Transmission mode (see README)\n";
             return 1;
         }
         else if(arg == "--verbose" || arg == "-v") VERBOSE = true;
         else{
-            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number> <list>\t\t= Camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -b <bytes>\t\t= Received messages buffer size\n  -m <number>\t\t= Transmission mode (see README)\n";
+            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number> <list>\t\t= Camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -m <number>\t\t= Transmission mode (see README)\n";
             return 1;
         }
     }
