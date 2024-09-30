@@ -5,9 +5,9 @@
 #include <unistd.h>
 #include <iostream>
 #include <vector>
-#include <cstring>  // For strerror
-#include <cerrno>   // For errno
-#include <cstdlib>  // For atoi
+#include <cstring>
+#include <cerrno>
+#include <cstdlib>
 
 using namespace std;
 using namespace cv;
@@ -40,27 +40,18 @@ int main(int argc, char* argv[]) {
         }
         sources[i].set(CAP_PROP_FRAME_WIDTH, WIDTH);
         sources[i].set(CAP_PROP_FRAME_HEIGHT, HEIGHT);
-
-        // Create the socket
         socket_fds[i] = socket(AF_INET, SOCK_STREAM, 0);
         if (socket_fds[i] < 0) {
             cnlog("[e] Could not create socket for source " + to_string(i), 0);
             return -1;
         }
-
-        // Set the socket to non-blocking mode
         int flags = fcntl(socket_fds[i], F_GETFL, 0);
-        fcntl(socket_fds[i], F_SETFL, flags | O_NONBLOCK);
-
-        // Server address setup
+        fcntl(socket_fds[i], F_SETFL, flags & ~O_NONBLOCK);
         sockaddr_in server_addr;
         server_addr.sin_family = AF_INET;
         server_addr.sin_port = htons(PORT + i);
         inet_pton(AF_INET, SERVER_IP.c_str(), &server_addr.sin_addr);
-
-        // Connect to the server
         connect(socket_fds[i], (sockaddr*)&server_addr, sizeof(server_addr));
-
         if (i == 0 && !handshake(socket_fds[i])) {
             for (int j = 0; j < CAMS.size(); j++) {
                 close(socket_fds[i]);
@@ -87,7 +78,7 @@ int main(int argc, char* argv[]) {
             }
             packet_numbers[i] %= 100;
         }
-        usleep(30000);  // Sleep for 30ms (approx. 33 FPS)
+        usleep(20000);
     }
 
     cnlog("[i] Shutting down client...", 2);
@@ -113,7 +104,7 @@ bool handshake(int socket_fd) {
     while (true) {
         if (recv(socket_fd, (char*)&handshakeAck, sizeof(handshakeAck), 0) <= 0) {
             if (errno == EWOULDBLOCK || errno == EAGAIN) {
-                usleep(50000);  // Sleep for 50ms
+                usleep(50000);
                 continue;
             } else {
                 cnlog("[e] Did not receive handshake acknowledgment. Error: " + string(strerror(errno)), 0);

@@ -80,11 +80,11 @@ int main(int argc, char* argv[]){
         client_threads[i] = thread(handleClient, client_socket, i);
     }
 
-    cnlog("[i] Shutting down server...", 2);
     for(int i = 0; i < NUM_CAMS; i++){
         if(client_threads[i].joinable()) client_threads[i].join();
         closesocket(server_sockets[i]);
     }
+    cnlog("[i] Shutting down server...", 2);
     WSACleanup();
     return 0;
 }
@@ -128,13 +128,26 @@ void handleClient(SOCKET client_socket, int index){
         }
         else if(int(metadata[1]) != PACKETS[index].first+1) PACKETS[index].second++;
         PACKETS[index].first = metadata[1];
-        bytesReceived = recv(client_socket, (char*)buffer.data(), metadata[0], 0);
-        if(bytesReceived <= 0) break;
+        bytesReceived = 0;
+        while(bytesReceived < metadata[0]){
+            int result = recv(client_socket, (char*)buffer.data() + bytesReceived, metadata[0] - bytesReceived, 0);
+            if(result == SOCKET_ERROR){
+                cnlog("[e] Failed to receive data. Code: " + to_string(WSAGetLastError()), 0);
+                break;
+            }
+            else if(result == 0){
+                cnlog("[e] Connection closed by peer", 0);
+                break;
+            }
+            bytesReceived += result; 
+        }
+       // bytesReceived = recv(client_socket, (char*)buffer.data(), metadata[0], 0);
+       // if(bytesReceived <= 0) break;
         Mat frame = imdecode(buffer, IMREAD_COLOR);
         if(frame.empty()) continue;
         imshow("Source " + to_string(index), frame);
         stringstream stream;
-        stream << "[recv" << index << "] " << fixed << setprecision(2) << bytesReceived/1000.0 << " kB\t" << PACKETS[index].second << "% packet loss";
+        stream << "[recv" << index << "] " << fixed << setprecision(2) << van/1000.0 << " kB\t" << PACKETS[index].second << "% packet loss";
         cnlog(stream.str(), 2);
         if(waitKey(1) == 'q') break;
     }
