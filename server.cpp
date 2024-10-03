@@ -130,21 +130,24 @@ void handleClient(SOCKET client_socket, int index){
         PACKETS[index].first = metadata[1];
         bytesReceived = 0;
         while(bytesReceived < metadata[0]){
-            int result = recv(client_socket, (char*)buffer.data() + bytesReceived, metadata[0] - bytesReceived, 0);
-            if(result == SOCKET_ERROR){
+            int curr = recv(client_socket, (char*)buffer.data() + bytesReceived, metadata[0] - bytesReceived, 0);
+            if(CURRENCYFMT == SOCKET_ERROR){
                 cnlog("[e] Failed to receive data. Code: " + to_string(WSAGetLastError()), 0);
                 break;
             }
-            else if(result == 0){
+            else if(curr <= 0){
                 cnlog("[e] Connection closed by peer", 0);
                 break;
             }
-            bytesReceived += result; 
+            bytesReceived += curr; 
         }
        // bytesReceived = recv(client_socket, (char*)buffer.data(), metadata[0], 0);
        // if(bytesReceived <= 0) break;
         Mat frame = imdecode(buffer, IMREAD_COLOR);
-        if(frame.empty()) continue;
+        if(frame.empty()){
+            cnlog("[w] Empty frame received on source " + to_string(index), 1);
+            continue;
+        }
         imshow("Source " + to_string(index), frame);
         stringstream stream;
         stream << "[recv" << index << "] " << fixed << setprecision(2) << van/1000.0 << " kB\t" << PACKETS[index].second << "% packet loss";
@@ -155,37 +158,25 @@ void handleClient(SOCKET client_socket, int index){
 }
 
 int args(int argc, char* argv[]){
-    for(int i = 1; i < argc; ++i){
+    for(int i = 1; i < argc; i++){
         string arg = argv[i];
         if(arg == "--port" || arg == "-p"){
-            if(i+1 < argc){
-                try{
-                    PORT = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --port invalid number\n";
-                    return 1;
-                }
-            }
+            if(i+1 < argc) PORT = atoi(argv[++i]);
             else{
                 cout << "[e] --port requires a port number\n";
                 return 1;
             }
         }
         else if(arg == "--help" || arg == "-H"){
-            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n";
+            cout << "Options\n"
+                 << "  -v\t\t\t= Verbose output\n"
+                 << "  -H\t\t\t= Displays available options\n"
+                 << "  -p <number>\t\t= Server TCP port number\n"
+                 << "  -c <number>\t\t= Camera inputs to receive\n";
             return 1;
         }
         else if(arg == "--cams" || arg == "-c"){
-            if(i+1 < argc){
-                try{
-                    NUM_CAMS = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --cams invalid number\n";
-                    return 1;
-                }
-            }
+            if(i+1 < argc) NUM_CAMS = atoi(argv[++i]);
             else{
                 cout << "[e] --cams requires a source number\n";
                 return 1;
@@ -193,7 +184,11 @@ int args(int argc, char* argv[]){
         }
         else if(arg == "--verbose" || arg == "-v") VERBOSE = true;
         else{
-            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -p <number>\t\t= Server TCP port number\n";
+            cout << "[e] Invalid argument detected\n\nOptions\n"
+                 << "  -v\t\t\t= Verbose output\n"
+                 << "  -H\t\t\t= Displays available options\n"
+                 << "  -p <number>\t\t= Server TCP port number\n"
+                 << "  -c <number>\t\t= Camera inputs to receive\n";
             return 1;
         }
     }

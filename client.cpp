@@ -45,17 +45,19 @@ int main(int argc, char* argv[]){
         }
         sources[i].set(CAP_PROP_FRAME_WIDTH, WIDTH);
         sources[i].set(CAP_PROP_FRAME_HEIGHT, HEIGHT);
+
         socket_fds[i] = socket(AF_INET, SOCK_STREAM, 0);
         if(socket_fds[i] == INVALID_SOCKET){
             cnlog("[e] Could not create socket for source " + to_string(i), 0);
             WSACleanup();
             return -1;
         }
-        ioctlsocket(socket_fds[i], FIONBIO, &socket_mode);
+        //ioctlsocket(socket_fds[i], FIONBIO, &socket_mode);
         sockaddr_in server_addr;
         server_addr.sin_family = AF_INET;
         server_addr.sin_port = htons(PORT + i);
         inet_pton(AF_INET, SERVER_IP.c_str(), &server_addr.sin_addr);
+
         connect(socket_fds[i], (sockaddr*)&server_addr, sizeof(server_addr));
         if(i == 0 && !handshake(socket_fds[i])){
             for(int j = 0; j < CAMS.size(); j++){
@@ -84,7 +86,7 @@ int main(int argc, char* argv[]){
             }
             packet_numbers[i] %= 100;
         }
-        Sleep(30);
+        Sleep(20);
     }
 
     cnlog("[i] Shutting down client...", 2);
@@ -102,11 +104,13 @@ void cnlog(const string& str, int lvl){
 
 bool handshake(SOCKET socket_fd){
     cnlog("[i] Starting handshake...", 2);
+
     int handshakeMessage[] = {0, MODE, CAMS.size()}, handshakeAck = 0;
     if(send(socket_fd, (char*)handshakeMessage, sizeof(handshakeMessage), 0) == SOCKET_ERROR){
         cnlog("[e] Could not send handshake", 0);
         return false;
     }
+
     while(1){
         if(recv(socket_fd, (char*)&handshakeAck, sizeof(handshakeAck), 0) <= 0){ 
             if(WSAGetLastError() == WSAEWOULDBLOCK){
@@ -124,6 +128,7 @@ bool handshake(SOCKET socket_fd){
         cnlog("[e] Invalid handshake response: " + to_string(handshakeAck), 0);
         return false;
     }
+
     cnlog("[i] Handshake complete", 2);
     return true;
 }
@@ -142,7 +147,7 @@ bool sendPacket(SOCKET socket_fd, vector<uchar>& buffer, int packet_number){
 }
 
 int args(int argc, char* argv[]){
-    for(int i = 1; i < argc; ++i){
+    for(int i = 1; i < argc; i++){
         string arg = argv[i];
         if(arg == "--ip" || arg == "-i"){
             if(i+1 < argc) SERVER_IP = argv[++i];
@@ -152,45 +157,21 @@ int args(int argc, char* argv[]){
             }
         }
         else if(arg == "--port" || arg == "-p"){
-            if(i+1 < argc){
-                try{
-                    PORT = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --port invalid number\n";
-                    return 1;
-                }
-            }
+            if(i+1 < argc) PORT = atoi(argv[++i]);
             else{
                 cout << "[e] --port requires a port number\n";
                 return 1;
             }
         }
         else if(arg == "--width" || arg == "-w"){
-            if(i+1 < argc){
-                try{
-                    WIDTH = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --width invalid number\n";
-                    return 1;
-                }
-            }
+            if(i+1 < argc) WIDTH = atoi(argv[++i]);
             else{
                 cout << "[e] --width requires a horizontal resolution\n";
                 return 1;
             }
         }
         else if(arg == "--height" || arg == "-h"){
-            if(i+1 < argc){
-                try{
-                    HEIGHT = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --height invalid number\n";
-                    return 1;
-                }
-            }
+            if(i+1 < argc) HEIGHT = atoi(argv[++i]);
             else{
                 cout << "[e] --height requires a vertical resolution\n";
                 return 1;
@@ -199,13 +180,7 @@ int args(int argc, char* argv[]){
         else if(arg == "--cams" || arg == "-c"){
             int n = 0;
             if(i+3 <= argc){
-                try{
-                    n = atoi(argv[i+1]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --cams invalid number\n";
-                    return 1;
-                }
+                n = atoi(argv[i+1]);
                 if(argc < i+n){
                     cout << "[e] Incomplete camera list\n";
                     return 1;
@@ -222,42 +197,42 @@ int args(int argc, char* argv[]){
             i += n+1;
         }
         else if(arg == "--mode" || arg == "-m"){
-            if(i+1 < argc){
-                try{
-                    MODE = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --mode invalid number\n";
-                    return 1;
-                }
-            }
+            if(i+1 < argc) MODE = atoi(argv[++i]);
             else{
                 cout << "[e] --mode requires a number\n";
                 return 1;
             }
         }
         else if(arg == "--quality" || arg == "-q"){
-            if(i+1 < argc){
-                try{
-                    QUALITY = atoi(argv[++i]);
-                }
-                catch(const invalid_argument&){
-                    cout << "[e] --quality invalid number\n";
-                    return 1;
-                }
-            }
+            if(i+1 < argc) QUALITY = atoi(argv[++i]);
             else{
                 cout << "[e] --quality requires a camera amount\n";
                 return 1;
             }
         }
         else if(arg == "--help" || arg == "-H"){
-            cout << "Options\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number> <list>\t\t= Camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -m <number>\t\t= Transmission mode (see README)\n";
+            cout << "Options\n"
+                 << "  -v\t\t\t= Verbose output\n"
+                 << "  -H\t\t\t= Displays available options\n"
+                 << "  -i <address>\t\t= Server IP address\n"
+                 << "  -p <number>\t\t= Server TCP port number\n"
+                 << "  -w <pixels>\t\t= Video horizontal resolution\n"
+                 << "  -h <pixels>\t\t= Video vertical resolution\n"
+                 << "  -c <number> <list>\t\t= Camera inputs to transmit\n"
+                 << "  -q <number>\t\t= Transmission video quality (0-100)\n";
             return 1;
         }
         else if(arg == "--verbose" || arg == "-v") VERBOSE = true;
         else{
-            cout << "[e] Invalid argument detected\n\nOptions\n  -v\t\t\t= Verbose output\n  -H\t\t\t= Displays available options\n  -i <address>\t\t= Server ip address\n  -p <number>\t\t= Server TCP port number\n  -w <pixels>\t\t= Video horizontal resolution\n  -h <pixels>\t\t= Video vertical resolution\n  -c <number> <list>\t\t= Camera inputs to transmit\n  -q <number>\t\t= Transmission video quality (0-100)\n  -m <number>\t\t= Transmission mode (see README)\n";
+            cout << "[e] Invalid argument detected\n\nOptions\n"
+                 << "  -v\t\t\t= Verbose output\n"
+                 << "  -H\t\t\t= Displays available options\n"
+                 << "  -i <address>\t\t= Server IP address\n"
+                 << "  -p <number>\t\t= Server TCP port number\n"
+                 << "  -w <pixels>\t\t= Video horizontal resolution\n"
+                 << "  -h <pixels>\t\t= Video vertical resolution\n"
+                 << "  -c <number> <list>\t\t= Camera inputs to transmit\n"
+                 << "  -q <number>\t\t= Transmission video quality (0-100)\n";
             return 1;
         }
     }
