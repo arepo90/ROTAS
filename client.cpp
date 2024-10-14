@@ -24,7 +24,6 @@ int main(int argc, char* argv[]){
     cnlog("[i] Initializing client...", 2);
 
     WSADATA wsaData;
-    u_long socket_mode = 1;
     vector<SOCKET> socket_fds(CAMS.size());
     vector<VideoCapture> sources(CAMS.size());
     vector<vector<uchar>> buffers(CAMS.size());
@@ -52,7 +51,6 @@ int main(int argc, char* argv[]){
             WSACleanup();
             return -1;
         }
-        //ioctlsocket(socket_fds[i], FIONBIO, &socket_mode);
         sockaddr_in server_addr;
         server_addr.sin_family = AF_INET;
         server_addr.sin_port = htons(PORT + i);
