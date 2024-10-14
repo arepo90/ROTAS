@@ -10,7 +10,7 @@ using namespace std;
 using namespace cv;
 
 vector<pair<int, int>> PACKETS;
-int PORT = 8080, NUM_CAMS = 1, MODE = 0;
+int PORT = 8000, NUM_CAMS = 1, MODE = 0;
 bool VERBOSE = false;
 
 int args(int argc, char* argv[]);
@@ -116,7 +116,7 @@ bool handshake(SOCKET client_socket){
 }
 
 void handleClient(SOCKET client_socket, int index){
-    int metadata[2];
+    int metadata[5];
     vector<uchar> buffer;
     while(1){
         int bytesReceived = recv(client_socket, (char*)metadata, sizeof(metadata), 0);
@@ -131,7 +131,7 @@ void handleClient(SOCKET client_socket, int index){
         bytesReceived = 0;
         while(bytesReceived < metadata[0]){
             int curr = recv(client_socket, (char*)buffer.data() + bytesReceived, metadata[0] - bytesReceived, 0);
-            if(CURRENCYFMT == SOCKET_ERROR){
+            if(curr == SOCKET_ERROR){
                 cnlog("[e] Failed to receive data. Code: " + to_string(WSAGetLastError()), 0);
                 break;
             }
@@ -141,8 +141,6 @@ void handleClient(SOCKET client_socket, int index){
             }
             bytesReceived += curr; 
         }
-       // bytesReceived = recv(client_socket, (char*)buffer.data(), metadata[0], 0);
-       // if(bytesReceived <= 0) break;
         Mat frame = imdecode(buffer, IMREAD_COLOR);
         if(frame.empty()){
             cnlog("[w] Empty frame received on source " + to_string(index), 1);
@@ -150,7 +148,7 @@ void handleClient(SOCKET client_socket, int index){
         }
         imshow("Source " + to_string(index), frame);
         stringstream stream;
-        stream << "[recv" << index << "] " << fixed << setprecision(2) << van/1000.0 << " kB\t" << PACKETS[index].second << "% packet loss";
+        stream << "[recv" << index << "] " << fixed << setprecision(2) << bytesReceived/1000.0 << " kB\t" << PACKETS[index].second << "% packet loss\t" << metadata[2] << " " << metadata[3] << " " << metadata[4];
         cnlog(stream.str(), 2);
         if(waitKey(1) == 'q') break;
     }
