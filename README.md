@@ -1,3 +1,6 @@
+> [!WARNING]
+> This repository is vastly outdated compared to its [final implementation](https://github.com/arepo90/rescue_relay). Several updates like UDP over TCP, packet fragmentation, ROS2 implementation, etc. are not and will not be added here anytime soon
+
 # ROTAS (Real-time Optimized Transmission for Aggregated Sources)
 
 Self-contained server and client applications for TCP video streaming. Optimized for limited bandwith (<=1 mbps) connections for low latency streaming of HD video sources, although it can be repurposed to send any kind of messages in both directions. Threading is used to stream multiple sources in parallel, so performance greatly depends on hardware.
